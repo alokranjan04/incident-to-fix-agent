@@ -1,0 +1,178 @@
+# 15 seeded bugs. Bug 01 is live on main (matches INC0010004).
+# Bugs 02-15 are injected on their own branch (bug/NN) by scripts/seed_bugs.py.
+# fix_files = the files a correct fix should touch (used to score "right file found").
+# hidden_test = the test that fails with the bug and passes once it is fixed.
+bugs:
+  - id: "01"
+    branch: main
+    file: app/routes/orders.py
+    inject: null
+    fix_files: [app/routes/orders.py, app/models.py]
+    hidden_test: evals/hidden_tests/test_bug_01.py
+    short_description: Order API returns 500 when quantity is 0
+    description: |
+      POST /orders with {"item_id": "A100", "quantity": 0} returns HTTP 500.
+      Expected: HTTP 400 with "quantity must be at least 1".
+
+      Traceback (most recent call last):
+        File "app/routes/orders.py", line 42, in create_order
+          unit_price = total / order.quantity
+      ZeroDivisionError: division by zero
+
+  - id: "02"
+    branch: bug/02
+    file: app/services/pricing.py
+    inject: {find: "pct = COUPONS.get(coupon.upper())", replace: "pct = COUPONS.get(coupon)"}
+    fix_files: [app/services/pricing.py]
+    hidden_test: evals/hidden_tests/test_bug_02.py
+    short_description: Valid coupon rejected when typed in lowercase
+    description: |
+      Customers entering "save10" at checkout get HTTP 400 "unknown coupon save10".
+      The same order with "SAVE10" works. Coupons should not be case-sensitive.
+
+  - id: "03"
+    branch: bug/03
+    file: app/services/pricing.py
+    inject: {find: "return round(discounted * (1 + TAX_RATE), 2)", replace: "return round(subtotal * (1 + TAX_RATE), 2)"}
+    fix_files: [app/services/pricing.py]
+    hidden_test: evals/hidden_tests/test_bug_03.py
+    short_description: Coupon accepted but order total not discounted
+    description: |
+      POST /orders with {"item_id": "A100", "quantity": 1, "coupon": "SAVE10"} returns 201,
+      but total is 126.0. Expected 113.4 (10% off, then 5% tax).
+
+  - id: "04"
+    branch: bug/04
+    file: app/routes/orders.py
+    inject: {find: "return items[offset : offset + limit]", replace: "return items[offset + 1 : offset + limit]"}
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_04.py
+    short_description: Order list is missing the first order
+    description: |
+      GET /orders after placing 2 orders returns only 1. The first order never appears
+      in the list, although GET /orders/1 still returns it.
+
+  - id: "05"
+    branch: bug/05
+    file: app/routes/orders.py
+    inject:
+      find: "    order = ORDERS.get(order_id)\n    if order is None:\n        raise HTTPException(status_code=404, detail=\"order not found\")\n    return order\n"
+      replace: "    order = ORDERS.get(order_id)\n    return order\n"
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_05.py
+    short_description: Unknown order ID returns 200 with an empty body
+    description: |
+      GET /orders/999 returns HTTP 200 with body null. Expected HTTP 404 "order not found".
+      Mobile app crashes when it receives null.
+
+  - id: "06"
+    branch: bug/06
+    file: app/services/inventory.py
+    inject: {find: "product.stock < quantity", replace: "product.stock <= quantity"}
+    fix_files: [app/services/inventory.py]
+    hidden_test: evals/hidden_tests/test_bug_06.py
+    short_description: Cannot buy the last item in stock
+    description: |
+      Item C300 shows stock 1, but POST /orders with {"item_id": "C300", "quantity": 1}
+      returns HTTP 409 "not enough stock".
+
+  - id: "07"
+    branch: bug/07
+    file: app/services/inventory.py
+    inject: {find: "product.stock -= quantity", replace: "product.stock - quantity"}
+    fix_files: [app/services/inventory.py]
+    hidden_test: evals/hidden_tests/test_bug_07.py
+    short_description: Items oversold, stock never goes down
+    description: |
+      Item C300 has stock 1, yet two customers each bought it. GET /inventory/C300 still
+      shows stock 1 after both orders.
+
+  - id: "08"
+    branch: bug/08
+    file: app/routes/orders.py
+    inject:
+      find: "        order.status = \"CANCELLED\"\n        inventory.release(order.item_id, order.quantity)\n"
+      replace: "        order.status = \"CANCELLED\"\n"
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_08.py
+    short_description: Cancelled orders do not return stock
+    description: |
+      After cancelling an order for C300 (stock was 1), the item stays out of stock and new
+      orders get HTTP 409. Cancelling should put the quantity back into stock.
+
+  - id: "09"
+    branch: bug/09
+    file: app/routes/orders.py
+    inject: {find: "if order.status == \"SHIPPED\":", replace: "if order.status == \"Shipped\":"}
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_09.py
+    short_description: Shipped orders can be cancelled
+    description: |
+      POST /orders/{id}/cancel on an order already marked SHIPPED returns 200 and sets it to
+      CANCELLED. Expected HTTP 409 "shipped orders cannot be cancelled".
+
+  - id: "10"
+    branch: bug/10
+    file: app/routes/orders.py
+    inject: {find: "o.status == status]", replace: "o.status == status.lower()]"}
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_10.py
+    short_description: Filtering orders by status returns nothing
+    description: |
+      GET /orders?status=SHIPPED returns an empty list even though shipped orders exist.
+      Ops dashboard shows zero shipments.
+
+  - id: "11"
+    branch: bug/11
+    file: app/services/pricing.py
+    inject: {find: "return round(discounted * (1 + TAX_RATE), 2)", replace: "return float(int(discounted * (1 + TAX_RATE)))"}
+    fix_files: [app/services/pricing.py]
+    hidden_test: evals/hidden_tests/test_bug_11.py
+    short_description: Order totals lose their paise
+    description: |
+      One desk lamp (B200, price 899) should total 943.95 with tax. The API returns 943.0.
+      Finance reports a mismatch with the payment gateway.
+
+  - id: "12"
+    branch: bug/12
+    file: app/services/inventory.py
+    inject: {find: "p.stock < threshold", replace: "p.stock > threshold"}
+    fix_files: [app/services/inventory.py]
+    hidden_test: evals/hidden_tests/test_bug_12.py
+    short_description: Low-stock report lists well-stocked items
+    description: |
+      GET /inventory/low-stock?threshold=5 returns A100 (stock 10) and omits B200 (stock 3)
+      and C300 (stock 1). Reorders are being placed for the wrong items.
+
+  - id: "13"
+    branch: bug/13
+    file: app/routes/orders.py
+    inject: {find: "        total=total,\n", replace: "        total=unit_price,\n"}
+    fix_files: [app/routes/orders.py]
+    hidden_test: evals/hidden_tests/test_bug_13.py
+    short_description: Order total shows the price of one unit
+    description: |
+      POST /orders with {"item_id": "A100", "quantity": 2} returns total 126.0.
+      Expected 252.0. Customers are being undercharged on multi-quantity orders.
+
+  - id: "14"
+    branch: bug/14
+    file: app/store.py
+    inject: {find: "    _counter += 1\n    return _counter", replace: "    return _counter"}
+    fix_files: [app/store.py]
+    hidden_test: evals/hidden_tests/test_bug_14.py
+    short_description: New orders overwrite earlier orders
+    description: |
+      Every new order gets order_id 0. After three orders, GET /orders shows only the latest
+      one. Earlier orders are lost.
+
+  - id: "15"
+    branch: bug/15
+    file: app/routes/inventory.py
+    inject: {find: "    return ProductPublic(**product.model_dump())\n", replace: "    return product\n"}
+    fix_files: [app/routes/inventory.py]
+    hidden_test: evals/hidden_tests/test_bug_15.py
+    short_description: Item API exposes internal cost price
+    description: |
+      GET /inventory/A100 now includes "cost_price": 70.0 in the public response.
+      Cost price is confidential and must never be returned to customers.
