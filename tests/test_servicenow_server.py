@@ -185,6 +185,34 @@ def test_invalid_incident_number_is_rejected_without_a_request(
     assert snow.calls == []
 
 
+# --- EARS: WHEN get_incident returns text fields containing \r\n, the server SHALL
+#     replace each \r\n with \n. ---------------------------------------------------------
+
+def test_get_incident_normalises_crlf_to_lf(
+    snow: FakeServiceNow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(INCIDENT, "short_description", "Order API returns 500\r\nwhen quantity is 0")
+    monkeypatch.setitem(
+        INCIDENT,
+        "description",
+        "POST /orders returns HTTP 500.\r\nExpected: HTTP 400.\r\n\r\n"
+        "Traceback (most recent call last):\r\n"
+        '  File "app/routes/orders.py", line 42, in create_order\r\n'
+        "ZeroDivisionError: division by zero",
+    )
+
+    result = call_tool("get_incident", {"number": "INC0010004"}).data
+
+    assert result["short_description"] == "Order API returns 500\nwhen quantity is 0"
+    assert result["description"] == (
+        "POST /orders returns HTTP 500.\nExpected: HTTP 400.\n\n"
+        "Traceback (most recent call last):\n"
+        '  File "app/routes/orders.py", line 42, in create_order\n'
+        "ZeroDivisionError: division by zero"
+    )
+    assert all("\r" not in value for value in result.values())
+
+
 # --- EARS: WHEN get_incident returns an incident, the server SHALL include state_label,
 #     the name of its state code. ------------------------------------------------------
 

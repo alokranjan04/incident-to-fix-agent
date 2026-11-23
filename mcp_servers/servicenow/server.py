@@ -91,6 +91,10 @@ def _truncate(text: str) -> str:
     return text[: WORK_NOTE_MAX_CHARS - len(TRUNCATION_MARKER)] + TRUNCATION_MARKER
 
 
+def _normalise_newlines(value: str) -> str:
+    return value.replace("\r\n", "\n")
+
+
 def _update_incident(number: str, changes: dict[str, str]) -> None:
     sys_id = _find_incident(number, ("sys_id",))["sys_id"]
     _request("PATCH", f"{INCIDENT_PATH}/{sys_id}", json=changes)
@@ -100,7 +104,7 @@ def _update_incident(number: str, changes: dict[str, str]) -> None:
 def get_incident(number: str) -> dict:
     """Read an incident by number (e.g. INC0010004). Read-only."""
     row = _find_incident(number, INCIDENT_FIELDS)
-    incident = {field: row.get(field, "") for field in INCIDENT_FIELDS}
+    incident = {field: _normalise_newlines(row.get(field, "")) for field in INCIDENT_FIELDS}
     incident["state_label"] = STATE_LABELS.get(incident["state"], "Unknown")
     return incident
 

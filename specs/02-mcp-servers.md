@@ -21,6 +21,8 @@ Acceptance criteria
   at most 4,000 characters, ending with `… [truncated]`.
 - WHEN `get_incident` returns an incident, the server SHALL include `state_label`, the name
   of its state code.
+- WHEN `get_incident` returns text fields containing `\r\n`, the server SHALL replace each
+  `\r\n` with `\n`.
 
 ## GitHub MCP server (use GitHub's official server)
 Token: fine-grained PAT, repo `incident-to-fix-demo` only, Contents and Pull requests
