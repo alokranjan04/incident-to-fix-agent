@@ -46,7 +46,6 @@ def clones(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
         shutil.copytree(origin, dest)
 
     monkeypatch.setattr(verifier, "_clone", fake_clone)
-    monkeypatch.setenv("SNOW_PASSWORD", "not-for-tests")
     return branches
 
 

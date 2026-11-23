@@ -3,10 +3,7 @@ import re
 from typing import Any
 
 from google.adk.agents.callback_context import CallbackContext
-from google.genai import types
 from pydantic import BaseModel, Field
-
-from .guardrails import BUDGET_EXCEEDED_KEY
 
 MAX_SUSPECT_FILES = 3
 _TEST_PATH_RE = re.compile(
@@ -29,7 +26,9 @@ def is_test_path(path: str) -> bool:
 
 def cap_suspect_files(value: Any) -> list[dict]:
     """At most 3 non-test files, each with a single-line reason, whatever the model returned."""
-    files = value.get("suspect_files", []) if isinstance(value, dict) else value or []
+    files = value.get("suspect_files", []) if isinstance(value, dict) else value
+    if not isinstance(files, list):
+        return []
     capped = []
     for item in files:
         if not isinstance(item, dict) or not item.get("path") or is_test_path(str(item["path"])):
@@ -37,19 +36,6 @@ def cap_suspect_files(value: Any) -> list[dict]:
         lines = str(item.get("reason", "")).strip().splitlines()
         capped.append({"path": item["path"], "reason": lines[0] if lines else ""})
     return capped[:MAX_SUSPECT_FILES]
-
-
-def skip_unless_fix(callback_context: CallbackContext) -> types.Content | None:
-    """before_agent_callback: run only when triage decided to fix and budget remains."""
-    state = callback_context.state
-    decision = state.get("decision") or {}
-    if state.get(BUDGET_EXCEEDED_KEY):
-        reason = "tool-call budget reached"
-    elif not (isinstance(decision, dict) and decision.get("decision") == "fix"):
-        reason = "triage did not decide to fix"
-    else:
-        return None
-    return types.Content(role="model", parts=[types.Part(text=f"Skipped: {reason}.")])
 
 
 def store_suspect_files(callback_context: CallbackContext) -> None:

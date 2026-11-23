@@ -1,15 +1,25 @@
 """Settings for the incident_to_fix agent. Env vars (Secret Manager on Cloud Run, `.env` locally)."""
 import os
 from pathlib import Path
+from typing import Mapping
 
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(REPO_ROOT / ".env", override=False)
-os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
+# Gemini on Vertex AI. GOOGLE_GENAI_USE_ENTERPRISE replaces the deprecated GOOGLE_GENAI_USE_VERTEXAI.
+os.environ.setdefault("GOOGLE_GENAI_USE_ENTERPRISE", "TRUE")
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-FIX_MODEL = os.environ.get("GEMINI_FIX_MODEL", "gemini-2.5-pro")
+
+def resolve_models(env: Mapping[str, str]) -> tuple[str, str]:
+    """(model, fix model). No hard-coded names: models are retired too often."""
+    model = env.get("GEMINI_MODEL", "").strip()
+    if not model:
+        raise RuntimeError("GEMINI_MODEL is not set; see .env.example")
+    return model, env.get("GEMINI_FIX_MODEL", "").strip() or model
+
+
+MODEL, FIX_MODEL = resolve_models(os.environ)
 
 # The allow-list lives in code (specs/03-guardrails.md) so config cannot widen it.
 ALLOWED_OWNER = "alokranjan04"
@@ -17,6 +27,8 @@ ALLOWED_REPO_NAME = "incident-to-fix-demo"
 ALLOWED_REPO = f"{ALLOWED_OWNER}/{ALLOWED_REPO_NAME}"
 
 ALLOWED_REPO_URL = f"https://github.com/{ALLOWED_REPO}.git"
+ALLOWED_PR_URL_PREFIX = f"https://github.com/{ALLOWED_REPO}/pull/"
+GITHUB_API_PULLS_URL = f"https://api.github.com/repos/{ALLOWED_REPO}/pulls"
 
 DEFECT_CATEGORY = "software_defect"
 GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/"

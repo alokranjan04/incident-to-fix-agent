@@ -19,7 +19,7 @@ from mcp.client.stdio import get_default_environment
 
 from .config import ALLOWED_REPO_URL
 from .fixer import PATCH_KEY, is_test_change
-from .guardrails import BUDGET_EXCEEDED_KEY, TOOL_CALLS_KEY, patch_violation, spend_tool_call
+from .guardrails import STOP_REASON_KEY, TOOL_CALLS_KEY, patch_violation, spend_tool_call
 
 TEST_RESULT_KEY = "test_result"
 TIMEOUT_SECONDS = 120
@@ -121,17 +121,30 @@ class Verifier(BaseAgent):
 
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         state = ctx.session.state
-        delta: dict[str, Any] = {TOOL_CALLS_KEY: state.get(TOOL_CALLS_KEY) or 0}
-        if state.get(BUDGET_EXCEEDED_KEY) or spend_tool_call(delta):
-            delta[BUDGET_EXCEEDED_KEY] = True
-            result = _result(False, "budget", "tool-call budget reached before tests could run")
+        delta: dict[str, Any] = {}
+        stopped = state.get(STOP_REASON_KEY)
+        if stopped:
+            text = f"Skipped: run stopped ({stopped})."
         else:
-            result = await asyncio.to_thread(run_tests, state.get("branch", ""), state.get(PATCH_KEY) or [])
-        delta[TEST_RESULT_KEY] = result
+            delta[TOOL_CALLS_KEY] = state.get(TOOL_CALLS_KEY) or 0
+            if spend_tool_call(delta):
+                result = _result(False, "budget", "tool-call budget reached before tests could run")
+            else:
+                patch = state.get(PATCH_KEY)
+                result = await self._run_tests(state.get("branch") or "", patch if isinstance(patch, list) else [])
+            delta[TEST_RESULT_KEY] = result
+            text = f"run_tests: {result['summary']}"
         yield Event(
             invocation_id=ctx.invocation_id,
             author=self.name,
             branch=ctx.branch,
-            content=types.Content(role="model", parts=[types.Part(text=f"run_tests: {result['summary']}")]),
+            content=types.Content(role="model", parts=[types.Part(text=text)]),
             actions=EventActions(state_delta=delta),
         )
+
+    @staticmethod
+    async def _run_tests(branch: str, patch: list[dict]) -> dict:
+        try:
+            return await asyncio.to_thread(run_tests, branch, patch)
+        except Exception as exc:  # report as a failed run, never crash the pipeline
+            return _result(False, "error", f"run_tests raised {type(exc).__name__}", str(exc))

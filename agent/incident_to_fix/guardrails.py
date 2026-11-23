@@ -19,13 +19,17 @@ from .config import (
 log = logging.getLogger(__name__)
 
 SERVICENOW_TOOLS = {"get_incident", "add_work_note"}
-GITHUB_READ_TOOLS = {"get_file_contents", "list_commits"}
+GITHUB_READ_TOOLS = {"get_file_contents", "list_commits", "list_pull_requests"}
 GITHUB_SEARCH_TOOLS = {"search_code"}
 GITHUB_WRITE_TOOLS = {"create_branch", "push_files", "create_pull_request"}
 GITHUB_REPO_TOOLS = GITHUB_READ_TOOLS | GITHUB_WRITE_TOOLS
 
 TOOL_CALLS_KEY = "tool_calls"
-BUDGET_EXCEEDED_KEY = "budget_exceeded"
+# Why the run stopped early. The first reason recorded wins; the publisher reports it.
+STOP_REASON_KEY = "stop_reason"
+STOP_BUDGET = "budget"
+STOP_ESCALATE = "escalate"
+STOP_TESTS_FAILED = "tests_failed"
 
 _QUALIFIER_RE = re.compile(r"\b(repo|org|user):(\"[^\"]*\"|\S+)", re.IGNORECASE)
 _PROTECTED_NAME_PARTS = ("secret", "token", ".env")
@@ -102,12 +106,18 @@ def repo_violation(tool_name: str, args: dict[str, Any]) -> str | None:
     return f"tool {tool_name} is not allowed"
 
 
+def record_stop(state: MutableMapping[str, Any], reason: str) -> None:
+    """Record why the run stops, unless an earlier reason is already recorded."""
+    if not state.get(STOP_REASON_KEY):
+        state[STOP_REASON_KEY] = reason
+
+
 def spend_tool_call(state: MutableMapping[str, Any]) -> str | None:
     """Count one tool call against the budget. Returns why it is refused, or None."""
     used = int(state.get(TOOL_CALLS_KEY) or 0) + 1
     state[TOOL_CALLS_KEY] = used
     if used > TOOL_CALL_BUDGET:
-        state[BUDGET_EXCEEDED_KEY] = True
+        record_stop(state, STOP_BUDGET)
         return f"budget of {TOOL_CALL_BUDGET} tool calls reached"
     return None
 

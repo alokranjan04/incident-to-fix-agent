@@ -8,7 +8,7 @@ from google.adk.tools import BaseTool, ToolContext
 from pydantic import BaseModel, Field
 
 from .config import DEFECT_CATEGORY
-from .guardrails import is_allowed_repo
+from .guardrails import STOP_ESCALATE, is_allowed_repo, record_stop
 
 DEFAULT_BRANCH = "main"
 _BRANCH_RE = re.compile(r"\bbranch\s+[`'\"]?(bug/\d{2})\b", re.IGNORECASE)
@@ -71,4 +71,6 @@ def gate_decision(callback_context: CallbackContext) -> None:
     elif not is_allowed_repo(str(incident.get("u_repo", ""))):
         decision = {"decision": "escalate", "reason": "u_repo is not on the allow-list."}
     state["decision"] = decision
+    if decision.get("decision") != "fix":
+        record_stop(state, STOP_ESCALATE)
     return None

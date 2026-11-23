@@ -23,6 +23,7 @@ GITHUB_TOOLS = (
     "create_branch",
     "push_files",
     "create_pull_request",
+    "list_pull_requests",
 )
 
 

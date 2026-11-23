@@ -109,4 +109,13 @@ def test_budget_allows_40_calls_then_blocks() -> None:
 
     assert results[:40] == [None] * 40
     assert "budget of 40 tool calls reached" in results[40]["error"]
-    assert tool_context.state == {"tool_calls": 41, "budget_exceeded": True}
+    assert tool_context.state == {"tool_calls": 41, "stop_reason": "budget"}
+
+
+def test_first_stop_reason_wins() -> None:
+    tool, tool_context = SimpleNamespace(name="get_file_contents"), SimpleNamespace(state={"tool_calls": 40,
+                                                                                          "stop_reason": "escalate"})
+
+    enforce_budget(tool, {}, tool_context)
+
+    assert tool_context.state["stop_reason"] == "escalate"

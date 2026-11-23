@@ -9,7 +9,6 @@ from fastmcp.exceptions import ToolError
 
 from mcp_servers.servicenow import server
 
-PASSWORD = "s3cret-pa55word"
 INCIDENT = {
     "sys_id": "abc123",
     "number": "INC0010004",
@@ -55,10 +54,10 @@ class FakeServiceNow:
 
 
 @pytest.fixture
-def snow(monkeypatch: pytest.MonkeyPatch) -> FakeServiceNow:
+def snow(monkeypatch: pytest.MonkeyPatch, test_password: str) -> FakeServiceNow:
     monkeypatch.setenv("SNOW_INSTANCE_URL", "https://example.service-now.com")
     monkeypatch.setenv("SNOW_USER", "mcp.integration")
-    monkeypatch.setenv("SNOW_PASSWORD", PASSWORD)
+    monkeypatch.setenv("SNOW_PASSWORD", test_password)
     fake = FakeServiceNow()
     monkeypatch.setattr(server.requests, "request", fake)
     return fake
@@ -82,13 +81,13 @@ def test_server_lists_the_three_tools() -> None:
     assert asyncio.run(go()) == {"get_incident", "add_work_note", "set_state"}
 
 
-def test_get_incident_returns_the_spec_fields(snow: FakeServiceNow) -> None:
+def test_get_incident_returns_the_spec_fields(snow: FakeServiceNow, test_password: str) -> None:
     result = server.get_incident("INC0010004")
 
     assert result == {**{k: INCIDENT[k] for k in server.INCIDENT_FIELDS}, "state_label": "New"}
     call = snow.calls[0]
     assert call["url"] == "https://example.service-now.com/api/now/table/incident"
-    assert call["auth"] == ("mcp.integration", PASSWORD)
+    assert call["auth"] == ("mcp.integration", test_password)
 
 
 def test_get_incident_is_read_only(snow: FakeServiceNow) -> None:
@@ -108,7 +107,7 @@ def test_get_incident_unknown_number_returns_not_found_error(snow: FakeServiceNo
 # --- EARS: The server SHALL never log the password or full request headers. -----------
 
 def test_server_never_logs_password_or_headers(
-    snow: FakeServiceNow, caplog: pytest.LogCaptureFixture
+    snow: FakeServiceNow, caplog: pytest.LogCaptureFixture, test_password: str
 ) -> None:
     caplog.set_level(logging.DEBUG)
     snow.fail_patch = True
@@ -121,7 +120,7 @@ def test_server_never_logs_password_or_headers(
 
     assert caplog.records, "expected the server to log its requests"
     logged = caplog.text + str(failed_call.value) + str(not_found.value)
-    for forbidden in (PASSWORD, "Authorization", "Basic ", "Content-Type", "Accept"):
+    for forbidden in (test_password, "Authorization", "Basic ", "Content-Type", "Accept"):
         assert forbidden not in logged
 
 
