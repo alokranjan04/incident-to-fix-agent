@@ -14,9 +14,26 @@ from .config import GITHUB_MCP_URL, REPO_ROOT
 
 SNOW_ENV_VARS = ("SNOW_INSTANCE_URL", "SNOW_USER", "SNOW_PASSWORD")
 
+# The only MCP tools any agent may be given. Merge, delete and close are not on the list.
+SERVICENOW_TOOLS = ("get_incident", "add_work_note")
+GITHUB_TOOLS = (
+    "search_code",
+    "get_file_contents",
+    "list_commits",
+    "create_branch",
+    "push_files",
+    "create_pull_request",
+)
 
-def servicenow_toolset() -> McpToolset:
-    """Read-only in milestone A: get_incident only."""
+
+def _check_filter(tools: list[str], allowed: tuple[str, ...]) -> list[str]:
+    unknown = set(tools) - set(allowed)
+    if unknown:
+        raise ValueError(f"tools not allowed: {sorted(unknown)}")
+    return list(tools)
+
+
+def servicenow_toolset(tools: list[str]) -> McpToolset:
     # The stdio client passes a minimal env by default, so forward the SNOW_* vars.
     env = {**get_default_environment(), **{k: os.environ[k] for k in SNOW_ENV_VARS if k in os.environ}}
     return McpToolset(
@@ -29,11 +46,11 @@ def servicenow_toolset() -> McpToolset:
             ),
             timeout=30,
         ),
-        tool_filter=["get_incident"],
+        tool_filter=_check_filter(tools, SERVICENOW_TOOLS),
     )
 
 
-def github_toolset() -> McpToolset:
+def github_toolset(tools: list[str]) -> McpToolset:
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if not token:
         raise RuntimeError("GITHUB_TOKEN is not set")
@@ -42,5 +59,5 @@ def github_toolset() -> McpToolset:
             url=GITHUB_MCP_URL,
             headers={"Authorization": f"Bearer {token}"},
         ),
-        tool_filter=["search_code", "get_file_contents", "list_commits"],
+        tool_filter=_check_filter(tools, GITHUB_TOOLS),
     )

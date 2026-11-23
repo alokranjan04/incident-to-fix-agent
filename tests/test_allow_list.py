@@ -27,6 +27,9 @@ def call(tool_name: str, args: dict[str, Any]) -> dict | None:
         ("list_commits", {**REPO, "sha": "bug/07"}),
         ("search_code", {"query": "quantity repo:alokranjan04/incident-to-fix-demo"}),
         ("search_code", {"query": 'repo:"alokranjan04/incident-to-fix-demo" language:python total'}),
+        ("add_work_note", {"number": "INC0010004", "text": "x"}),
+        ("create_branch", {**REPO, "branch": "fix/INC0010004", "from_branch": "bug/07"}),
+        ("create_pull_request", {**REPO, "title": "x", "head": "fix/INC0010004", "base": "bug/07"}),
     ],
 )
 def test_calls_on_the_allowed_repo_run(tool: str, args: dict) -> None:
@@ -50,7 +53,11 @@ def test_calls_on_the_allowed_repo_run(tool: str, args: dict) -> None:
         ("search_code", {"query": "x repo:alokranjan04/incident-to-fix-demo-fork"}),
         ("create_pull_request", {**REPO, "title": "x"}),
         ("push_files", {**REPO, "branch": "main"}),
-        ("add_work_note", {"number": "INC0010004", "text": "x"}),
+        ("create_branch", {**REPO, "branch": "main", "from_branch": "bug/07"}),
+        ("create_pull_request", {**REPO, "title": "x", "head": "main", "base": "bug/07"}),
+        ("merge_pull_request", {**REPO, "pullNumber": 1}),
+        ("delete_branch", {**REPO, "branch": "fix/INC0010004"}),
+        ("set_state", {"number": "INC0010004", "state": "resolved"}),
     ],
 )
 def test_calls_outside_the_allow_list_are_blocked(tool: str, args: dict) -> None:

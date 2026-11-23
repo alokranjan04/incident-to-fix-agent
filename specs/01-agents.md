@@ -22,8 +22,13 @@ Steps 3 to 5 run inside a LoopAgent with max_iterations = 2.
 - WHEN triage decides the incident is not a code defect, the system SHALL add a work note
   explaining why and SHALL stop without opening a PR.
 - The locator SHALL return at most 3 suspect files, each with a one-line reason.
+- The locator SHALL rank only non-test source files; the reason SHALL name related tests.
+- WHEN `get_file_contents` is called again with the same path and ref in a session, the
+  system SHALL return the cached result without calling GitHub.
 - The fixer SHALL add or change a test that fails before the fix and passes after it.
 - IF tests fail after 2 fix attempts, THEN the system SHALL add a work note with the failing
   output and SHALL NOT open a PR.
 - WHEN a PR is opened, the system SHALL put the incident number in the PR title and SHALL add
   the PR URL to the incident's work notes.
+- WHEN a PR is opened, the system SHALL push to branch `fix/<incident number>` created from the
+  incident's branch, and SHALL open the PR against that branch.
